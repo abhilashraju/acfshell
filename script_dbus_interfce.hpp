@@ -35,16 +35,16 @@ namespace scrrunner
                 { return prop; });
 
             iface->register_method("start",
-                                   [this](const std::string &script)
+                                   [this](const std::string &id, const std::string &script)
                                    {
-                                       auto id = scriptRunner.run_script(script, std::bind_front(&ScriptInterface::removeFromActive, this));
-                                       if (!id)
+                                       bool success = scriptRunner.run_script(id, script, std::bind_front(&ScriptInterface::removeFromActive, this));
+                                       if (!success)
                                        {
                                            LOG_ERROR("Failed to start script");
-                                           return std::string();
+                                           return false;
                                        }
-                                       net::co_spawn(io_context, std::bind_front(&ScriptInterface::addToActive, this, *id), net::detached);
-                                       return *id;
+                                       net::co_spawn(io_context, std::bind_front(&ScriptInterface::addToActive, this, id), net::detached);
+                                       return success;
                                    });
 
             iface->initialize();
@@ -69,7 +69,7 @@ namespace scrrunner
         {
             if (ec)
             {
-                LOG_ERROR("Failed to start script");
+                LOG_ERROR("Failed to remove from active {}", ec.message());
                 return;
             }
             auto remover = [this, scriptId]() -> net::awaitable<void>
@@ -89,11 +89,11 @@ namespace scrrunner
             };
             net::co_spawn(io_context, std::move(remover), net::detached);
         }
-        net::awaitable<void> runScript(const std::string &script)
+        net::awaitable<void> runScript(const std::string &id, const std::string &script)
         {
             auto [ec, value] =
-                co_await awaitable_dbus_method_call<std::string>(
-                    *conn, busName.data(), objPath.data(), interface.data(), "start", script);
+                co_await awaitable_dbus_method_call<bool>(
+                    *conn, busName.data(), objPath.data(), interface.data(), "start", id, script);
 
             if (ec)
             {

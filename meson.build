@@ -1,5 +1,5 @@
 project('acfshell', 'cpp', version: '1.0.0', default_options: ['cpp_std=c++23','cpp_args=-Wno-subobject-linkage'])
-boost_dep = dependency('boost', modules: ['system','filesystem','coroutine'], required: true)
+boost_dep = dependency('boost', modules: ['coroutine'], required: true)
 openssl_dep = dependency('openssl', required: true)
 sdbusplus_dep = dependency('sdbusplus', required: false, include_type: 'system')
 executable('acfshell', 

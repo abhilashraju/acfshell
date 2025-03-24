@@ -12,7 +12,7 @@ int main(int argc, char *argv[])
     if (argc > 1)
     {
         std::string script = argv[1];
-        net::co_spawn(io_context, std::bind_front(&ScriptInterface::runScript, &scriptInterface, script), net::detached);
+        net::co_spawn(io_context, std::bind_front(&ScriptInterface::runScript, &scriptInterface, std::string("newid"), script), net::detached);
     }
     io_context.run();
     return 0;

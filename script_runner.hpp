@@ -59,7 +59,7 @@ namespace scrrunner
             bp::async_pipe ap(io_context);
 
             boost::system::error_code ec;
-            bp::child c(bp::search_path("bash"), filename, bp::std_out > ap);
+            bp::child c("/usr/bin/bash", filename, bp::std_out > ap);
             if (ec)
             {
                 LOG_ERROR("Failed to start child process: {}", ec.message());
@@ -80,31 +80,26 @@ namespace scrrunner
             }
             script_cache.erase(filename);
             std::filesystem::remove(filename);
-            callback(ec, hash);
+            callback(boost::system::error_code{}, hash);
         }
-        std::optional<std::string> run_script(const std::string &script, Callback callback)
+        bool run_script(const std::string &id, const std::string &script, Callback callback)
         {
 
-            auto scriptHash = makeHash(script);
-            if (!scriptHash)
-            {
-                return std::nullopt;
-            }
-            std::string filename = "/tmp/script_" + *scriptHash + ".sh";
+            std::string filename = "/tmp/script_" + id + ".sh";
 
             // Write the script to a file
             std::ofstream script_file(filename);
             if (!script_file)
             {
                 LOG_ERROR("Failed to create script file: {}", filename);
-                return std::nullopt;
+                return false;
             }
             script_file << script;
             script_file.close();
 
-            net::co_spawn(io_context, [this, filename, scriptHash = *scriptHash, callback = std::move(callback)]() mutable -> net::awaitable<void>
-                          { co_await execute(filename, scriptHash, std::move(callback)); }, net::detached);
-            return scriptHash;
+            net::co_spawn(io_context, [this, filename, id = id, callback = std::move(callback)]() mutable -> net::awaitable<void>
+                          { co_await execute(filename, id, std::move(callback)); }, net::detached);
+            return true;
         }
         ScriptRunner(net::io_context &io_context) : io_context(io_context) {}
         ~ScriptRunner()

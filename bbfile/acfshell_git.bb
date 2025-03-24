@@ -1,5 +1,5 @@
-SUMMARY = "acfshell: A shell environement for acf scripts"
-DESCRIPTION = "Acfshell is a script environement to start, stope and tracking of shell scripts encoded in Acf certificates"
+SUMMARY = "acfshell: A shell environment for acf scripts"
+DESCRIPTION = "Acfshell is a script environment to start, stop and track shell scripts encoded in Acf certificates"
 HOMEPAGE = "https://github.com/abhilashraju/acfshell"
 
 LICENSE = "MIT"
@@ -35,14 +35,10 @@ do_install() {
     install -d ${D}${bindir}
     install -m 0755 ${B}/acfshell ${D}${bindir}/acfshell
     install -d ${D}${sysconfdir}
- }
+}
 
 # Specify the package information
 FILES_${PN} = "${bindir}/* ${sysconfdir}/*"
-
-# Suppress the dev-elf QA issue
-INSANE_SKIP_${PN} = "dev-elf"
-INSANE_SKIP_${PN}-plugin = "dev-elf"
 
 # Enable wrap-based subproject downloading
 #EXTRA_OEMESON += "-Dwrap_mode=forcefallback"
