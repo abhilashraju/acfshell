@@ -1,0 +1,10 @@
+[Unit]
+Description=Script Runner Service
+
+[Service]
+ExecStart=/usr/bin/acfshell 
+User=root
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
