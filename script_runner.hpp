@@ -14,6 +14,7 @@
 #include <optional>
 #include <filesystem>
 #include "logger.hpp"
+static constexpr auto acfdirectory = "/tmp/acf/";
 namespace net = boost::asio;
 namespace bp = boost::process;
 namespace scrrunner
@@ -66,21 +67,40 @@ namespace scrrunner
                 callback(ec, hash);
                 co_return;
             }
-            script_cache.emplace(filename, std::ref(c));
+            script_cache.emplace(hash, ScriptEntry{std::ref(c), std::move(callback)});
+            if (!std::filesystem::exists(acfdirectory))
+            {
+                std::filesystem::create_directory(acfdirectory);
+            }
+            std::ofstream ofs(std::format("{}/{}.out", acfdirectory, hash));
             while (!ec)
             {
                 auto size = co_await net::async_read(ap, net::buffer(buf), net::redirect_error(net::use_awaitable, ec));
                 if (ec && ec != net::error::eof)
                 {
-                    LOG_ERROR("Error: {}", ec.message());
-                    callback(ec, hash);
-                    co_return;
+                    LOG_INFO("Error: {}", ec.message());
+                    break;
                 }
-                std::cout.write(buf.data(), size);
+                ofs.write(buf.data(), size);
             }
-            script_cache.erase(filename);
+            ofs.close();
+            invokeCallback(boost::system::error_code{}, hash);
+            remove(hash);
+        }
+        void invokeCallback(boost::system::error_code ec, const std::string &id)
+        {
+            auto it = script_cache.find(id);
+            if (it == script_cache.end())
+            {
+                return;
+            }
+            it->second.callback(ec, id);
+        }
+        void remove(const std::string &id)
+        {
+            script_cache.erase(id);
+            std::string filename = "/tmp/script_" + id + ".sh";
             std::filesystem::remove(filename);
-            callback(boost::system::error_code{}, hash);
         }
         bool run_script(const std::string &id, const std::string &script, Callback callback)
         {
@@ -101,16 +121,34 @@ namespace scrrunner
                           { co_await execute(filename, id, std::move(callback)); }, net::detached);
             return true;
         }
+        bool cancel_script(const std::string &id)
+        {
+            auto it = script_cache.find(id);
+            if (it == script_cache.end())
+            {
+                return false;
+            }
+            it->second.child.get().terminate();
+            it->second.callback(boost::system::error_code{}, id);
+            remove(id);
+            return true;
+        }
         ScriptRunner(net::io_context &io_context) : io_context(io_context) {}
         ~ScriptRunner()
         {
-            for (auto &[filename, child] : script_cache)
+            while (!script_cache.empty())
             {
-                child.get().terminate();
-                std::filesystem::remove(filename);
+                auto p = *script_cache.begin();
+                p.second.child.get().terminate();
+                remove(p.first);
             }
         }
         net::io_context &io_context;
-        std::map<std::string, std::reference_wrapper<bp::child>> script_cache;
+        struct ScriptEntry
+        {
+            std::reference_wrapper<bp::child> child;
+            std::function<void(boost::system::error_code, std::string)> callback;
+        };
+        std::map<std::string, ScriptEntry> script_cache;
     };
 } // namespace scrrunner

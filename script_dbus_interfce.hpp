@@ -46,6 +46,17 @@ namespace scrrunner
                                        net::co_spawn(io_context, std::bind_front(&ScriptInterface::addToActive, this, id), net::detached);
                                        return success;
                                    });
+            iface->register_method("cancel",
+                                   [this](const std::string &id)
+                                   {
+                                       bool success = scriptRunner.cancel_script(id);
+                                       if (!success)
+                                       {
+                                           LOG_ERROR("Failed to cancel script");
+                                           return false;
+                                       }
+                                       return success;
+                                   });
 
             iface->initialize();
         }
