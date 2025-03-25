@@ -1,7 +1,8 @@
 #include "script_runner.hpp"
+
 #include "script_dbus_interfce.hpp"
 #include "sdbus_calls_runner.hpp"
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
     using namespace scrrunner;
     getLogger().setLogLevel(LogLevel::INFO);
@@ -12,7 +13,11 @@ int main(int argc, char *argv[])
     if (argc > 1)
     {
         std::string script = argv[1];
-        net::co_spawn(io_context, std::bind_front(&ScriptInterface::runScript, &scriptInterface, std::string("newid"), script), net::detached);
+        net::co_spawn(
+            io_context,
+            std::bind_front(&ScriptInterface::runScript, &scriptInterface,
+                            std::string("newid"), script),
+            net::detached);
     }
     io_context.run();
     return 0;

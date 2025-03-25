@@ -3,58 +3,56 @@
 #include <boost/asio/coroutine.hpp>
 namespace scrrunner
 {
-    inline net::use_awaitable_t<> &mut_awaitable()
+inline net::use_awaitable_t<>& mut_awaitable()
+{
+    static net::use_awaitable_t<> myawitable;
+    return myawitable;
+}
+
+template <typename... Types>
+using PrependEC = std::tuple<boost::system::error_code, Types...>;
+template <typename... RetTypes>
+using ReturnTuple = std::conditional_t<
+    std::is_same_v<boost::system::error_code,
+                   std::tuple_element_t<0, std::tuple<RetTypes...>>>,
+    std::tuple<RetTypes...>, PrependEC<RetTypes...>>;
+
+template <typename... Types>
+using AwaitableResult = net::awaitable<ReturnTuple<Types...>>;
+template <typename Handler, typename... Types>
+struct PromiseType
+{
+    Handler promise;
+    void setValues(Types... values)
     {
-        static net::use_awaitable_t<> myawitable;
-        return myawitable;
+        promise(ReturnTuple<Types...>{std::move(values)...});
     }
+};
 
-    template <typename... Types>
-    using PrependEC = std::tuple<boost::system::error_code, Types...>;
-    template <typename... RetTypes>
-    using ReturnTuple = std::conditional_t<
-        std::is_same_v<boost::system::error_code,
-                       std::tuple_element_t<0, std::tuple<RetTypes...>>>,
-        std::tuple<RetTypes...>, PrependEC<RetTypes...>>;
-
-    template <typename... Types>
-    using AwaitableResult = net::awaitable<ReturnTuple<Types...>>;
-    template <typename Handler, typename... Types>
-    struct PromiseType
-    {
-        Handler promise;
-        void setValues(Types... values)
-        {
-            promise(ReturnTuple<Types...>{std::move(values)...});
-        }
-    };
-
-    template <typename... Ret, typename HanlderFunc>
-    auto make_awaitable_handler(HanlderFunc &&h)
-    {
-        return [h = std::move(h)]() -> AwaitableResult<Ret...>
-        {
-            co_return co_await net::async_initiate<
-                net::use_awaitable_t<>, ReturnTuple<Ret...>(ReturnTuple<Ret...>)>(
-                [h = std::move(h)](auto handler)
+template <typename... Ret, typename HanlderFunc>
+auto make_awaitable_handler(HanlderFunc&& h)
+{
+    return [h = std::move(h)]() -> AwaitableResult<Ret...> {
+        co_return co_await net::async_initiate<
+            net::use_awaitable_t<>, ReturnTuple<Ret...>(ReturnTuple<Ret...>)>(
+            [h = std::move(h)](auto handler) {
+                if constexpr (std::is_same_v<
+                                  boost::system::error_code,
+                                  std::tuple_element_t<0, std::tuple<Ret...>>>)
                 {
-                    if constexpr (std::is_same_v<
-                                      boost::system::error_code,
-                                      std::tuple_element_t<0, std::tuple<Ret...>>>)
-                    {
-                        PromiseType<decltype(handler), Ret...> promise{
-                            std::move(handler)};
-                        h(std::move(promise));
-                    }
-                    else
-                    {
-                        PromiseType<decltype(handler), boost::system::error_code,
-                                    Ret...>
-                            promise{std::move(handler)};
-                        h(std::move(promise));
-                    }
-                },
-                mut_awaitable());
-        };
-    }
+                    PromiseType<decltype(handler), Ret...> promise{
+                        std::move(handler)};
+                    h(std::move(promise));
+                }
+                else
+                {
+                    PromiseType<decltype(handler), boost::system::error_code,
+                                Ret...>
+                        promise{std::move(handler)};
+                    h(std::move(promise));
+                }
+            },
+            mut_awaitable());
+    };
+}
 } // namespace scrrunner
