@@ -17,7 +17,7 @@
 #include <optional>
 #include <string>
 #include <vector>
-static constexpr auto acfdirectory = "/tmp/acf/";
+static constexpr auto acfdirectory = "/tmp/acf";
 namespace net = boost::asio;
 namespace bp = boost::process;
 namespace scrrunner
@@ -62,7 +62,7 @@ struct ScriptRunner
         std::string dir = std::format("{}/{}", acfdirectory, id);
         if (!std::filesystem::exists(dir))
         {
-            std::filesystem::create_directory(dir);
+            std::filesystem::create_directories(dir);
         }
         return dir;
     }
