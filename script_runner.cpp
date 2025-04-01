@@ -13,10 +13,18 @@ int main(int argc, char* argv[])
     if (argc > 1)
     {
         std::string script = argv[1];
-        net::co_spawn(
-            io_context,
-            std::bind_front(&AcfShellIface::execute, &shellIface, script),
-            net::detached);
+        std::ifstream file(script);
+        if (!file)
+        {
+            LOG_ERROR("Failed to open script file: {}", script);
+            return 1;
+        }
+        std::string scriptContent((std::istreambuf_iterator<char>(file)),
+                                  std::istreambuf_iterator<char>());
+        net::co_spawn(io_context,
+                      std::bind_front(&AcfShellIface::execute, &shellIface,
+                                      scriptContent),
+                      net::detached);
     }
     io_context.run();
     return 0;
