@@ -55,6 +55,12 @@ struct ScriptRunner
             snprintf(buf, sizeof(buf), "%02x", hash[i]);
             hash_str += buf;
         }
+        // Restrict the hash length to 16 characters
+        constexpr size_t maxHashLen = 16;
+        if (hash_str.length() > maxHashLen)
+        {
+            hash_str.resize(maxHashLen);
+        }
         return hash_str;
     }
     std::string scriptDir(std::string id)
