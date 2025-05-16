@@ -8,8 +8,9 @@ int main(int argc, char* argv[])
     getLogger().setLogLevel(LogLevel::DEBUG);
     LOG_INFO("Starting script runner");
     net::io_context io_context;
-    ScriptRunner scriptRunner(io_context);
-    AcfShellIface shellIface(io_context, scriptRunner);
+    auto conn = std::make_shared<sdbusplus::asio::connection>(io_context);
+    ScriptRunner scriptRunner(io_context, conn);
+    AcfShellIface shellIface(io_context, scriptRunner, conn);
     if (argc > 1)
     {
         std::string script = argv[1];

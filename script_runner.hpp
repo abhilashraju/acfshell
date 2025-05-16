@@ -1,12 +1,9 @@
 #pragma once
 #include "logger.hpp"
+#include "sdbus_calls_runner.hpp"
 
 #include <openssl/evp.h>
 
-#include <boost/asio.hpp>
-#include <boost/asio/awaitable.hpp>
-#include <boost/asio/spawn.hpp>
-#include <boost/asio/use_awaitable.hpp>
 #include <boost/process.hpp>
 
 #include <filesystem>
@@ -18,7 +15,6 @@
 #include <string>
 #include <vector>
 static constexpr auto acfdirectory = "/tmp/acf";
-namespace net = boost::asio;
 namespace bp = boost::process;
 namespace scrrunner
 {
@@ -80,25 +76,11 @@ struct ScriptRunner
     {
         return std::format("{}/{}.out", scriptDir(id), id);
     }
-    net::awaitable<void> execute(const std::string& filename,
-                                 const std::string& hash, Callback callback)
+    net::awaitable<boost::system::error_code> writeResult(bp::async_pipe& ap,
+                                                          std::ofstream& os)
     {
         std::vector<char> buf(4096);
-
-        bp::async_pipe ap(io_context);
-
-        boost::system::error_code ec;
-        bp::child c("/usr/bin/bash", filename, bp::std_out > ap);
-        if (ec)
-        {
-            LOG_ERROR("Failed to start child process: {}", ec.message());
-            callback(ec, hash);
-            co_return;
-        }
-        script_cache.emplace(hash,
-                             ScriptEntry{std::ref(c), std::move(callback)});
-
-        std::ofstream ofs(scriptOutputFileName(hash));
+        boost::system::error_code ec{};
         while (!ec)
         {
             auto size = co_await net::async_read(
@@ -109,9 +91,56 @@ struct ScriptRunner
                 LOG_INFO("Error: {}", ec.message());
                 break;
             }
-            ofs.write(buf.data(), size);
+            os.write(buf.data(), size);
+        }
+        co_return (ec == net::error::eof ? boost::system::error_code{} : ec);
+    }
+    net::awaitable<void> execute(const std::string& filename,
+                                 const std::string& hash, Callback callback)
+    {
+        bp::async_pipe ap(io_context);
+        bp::async_pipe ep(io_context);
+
+        boost::system::error_code ec;
+        bp::child c("/usr/bin/bash", filename, bp::std_out > ap,
+                    bp::std_err > ep);
+        // if (ec)
+        // {
+        //     LOG_ERROR("Failed to start child process: {}", ec.message());
+        //     callback(ec, hash);
+        //     co_return;
+        // }
+        script_cache.emplace(hash,
+                             ScriptEntry{std::ref(c), std::move(callback)});
+
+        std::ofstream ofs(scriptOutputFileName(hash));
+        ec = co_await writeResult(ap, ofs);
+        if (ec)
+        {
+            LOG_ERROR("{}", ec.message());
+            co_return;
+        }
+        ec = co_await writeResult(ep, ofs);
+        if (ec)
+        {
+            LOG_ERROR("{}", ec.message());
+            co_return;
         }
         ofs.close();
+        uint64_t timeout = 30;
+        using paramtype = std::vector<
+            std::pair<std::string, std::variant<std::string, uint64_t>>>;
+        sdbusplus::message_t msg;
+        std::tie(ec, msg) =
+            co_await awaitable_dbus_method_call<sdbusplus::message_t>(
+                *conn, "xyz.openbmc_project.Dump.Manager",
+                "/xyz/openbmc_project/dump/bmc",
+                "xyz.openbmc_project.Dump.Create", "CreateDump", paramtype());
+
+        if (ec)
+        {
+            LOG_ERROR("Error creating dump: {}", ec.message());
+        }
         invokeCallback(boost::system::error_code{}, hash);
         remove(hash);
     }
@@ -163,7 +192,10 @@ struct ScriptRunner
         remove(id);
         return true;
     }
-    ScriptRunner(net::io_context& io_context) : io_context(io_context) {}
+    ScriptRunner(net::io_context& io_context,
+                 std::shared_ptr<sdbusplus::asio::connection> conn) :
+        io_context(io_context), conn(conn)
+    {}
     ~ScriptRunner()
     {
         while (!script_cache.empty())
@@ -174,6 +206,7 @@ struct ScriptRunner
         }
     }
     net::io_context& io_context;
+    std::shared_ptr<sdbusplus::asio::connection> conn;
     struct ScriptEntry
     {
         std::reference_wrapper<bp::child> child;

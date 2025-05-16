@@ -1,6 +1,11 @@
 #pragma once
 #include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/coroutine.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/use_awaitable.hpp>
+namespace net = boost::asio;
+
 namespace scrrunner
 {
 inline net::use_awaitable_t<>& mut_awaitable()

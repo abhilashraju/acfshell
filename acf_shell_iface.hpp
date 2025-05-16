@@ -19,10 +19,9 @@ struct AcfShellIface
     static constexpr std::string_view interface =
         "xyz.openbmc_project.TacfShell";
     std::vector<std::unique_ptr<ScriptIface>> scriptIfaces;
-    AcfShellIface(net::io_context& ioc, ScriptRunner& runner) :
-        io_context(ioc), scriptRunner(runner),
-        conn(std::make_shared<sdbusplus::asio::connection>(io_context)),
-        dbusServer(conn)
+    AcfShellIface(net::io_context& ioc, ScriptRunner& runner,
+                  std::shared_ptr<sdbusplus::asio::connection> conn) :
+        io_context(ioc), scriptRunner(runner), conn(conn), dbusServer(conn)
     {
         conn->request_name(busName.data());
         iface = dbusServer.add_interface(objPath.data(), interface.data());
@@ -82,7 +81,7 @@ struct AcfShellIface
     {
         bool success = scriptRunner.run_script(
             iface->data.id, iface->data.script,
-            std::bind_front(&AcfShellIface::removeFromActive, this));
+            std::bind_front(&AcfShellIface::onFinish, this));
         if (!success)
         {
             LOG_ERROR("Failed to start script");
@@ -115,6 +114,14 @@ struct AcfShellIface
             return it->get();
         }
         return nullptr;
+    }
+    bool onFinish(boost::system::error_code ec, std::string scriptId)
+    {
+        if (!ec)
+        {
+            return removeFromActive(ec, scriptId);
+        }
+        return false;
     }
     bool removeFromActive(boost::system::error_code ec, std::string scriptId)
     {
